@@ -29,9 +29,9 @@ https://qurihara.github.io/hyakunin-isshu-editor/
 | 部品 | 中身 |
 |---|---|
 | 土台のモデル | [llm-jp/llm-jp-3-150m](https://huggingface.co/llm-jp/llm-jp-3-150m)（1億5千万パラメータ、Apache-2.0） |
-| 追加の学習 | LoRA。日本語の文章800件に12主題の正解を付けて学習した。取り分けた124件での正答率は0.956 |
+| 追加の学習 | LoRA。日本語の文章1100件に12主題の正解を付けて学習した。うち300件は、主題を直接指す語を使わずに情景へ託して書いた文である。取り分けた166件での正答率は0.950 |
 | 実行 | 学習した差分を土台に統合し、ONNXへ書き出して4ビットに量子化した。ブラウザでは [transformers.js](https://github.com/huggingface/transformers.js) が WebGPU で動かす |
-| 判定器の大きさ | 152MB。GitHubの1ファイル100MBの制限に合わせ、40MBずつに分けて置いてある（`model3/onnx/parts/`）。ブラウザ側でつなぎ、保存領域へ入れてから読み込む |
+| 判定器の大きさ | 152MB。GitHubの1ファイル100MBの制限に合わせ、40MBずつに分けて置いてある（`model4/onnx/parts/`）。ブラウザ側でつなぎ、保存領域へ入れてから読み込む |
 | 札の絵 | Wikimedia Commons のパブリックドメインの絵札100枚 |
 
 ## 手元で動かす

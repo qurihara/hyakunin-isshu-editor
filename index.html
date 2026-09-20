@@ -233,17 +233,17 @@ const bootStart = performance.now();
 // 判定器の本体は、GitHubの1ファイル100MBの制限に合わせて分けて置いてある（parts/）。
 // 取得してつなぎ、transformers.js が見に行く場所（ブラウザの保存領域）へ先に置く。
 // そうすると、transformers.js からは1つのファイルとして見える。
-const MODEL_URL = new URL("./model3/onnx/model_q4f16.onnx", location.href).href;
+const MODEL_URL = new URL("./model4/onnx/model_q4f16.onnx", location.href).href;
 async function fetchInParts(cache) {
   let manifest;
   try {
-    manifest = await (await fetch("./model3/onnx/parts/manifest.json")).json();
+    manifest = await (await fetch("./model4/onnx/parts/manifest.json")).json();
   } catch (e) { return false; }      // 分けて置いていない場合は、ふつうに読み込ませる
   step("weights", "doing");
   const buffers = [];
   let loaded = 0;
   for (const part of manifest.parts) {
-    const response = await fetch(`./model3/onnx/parts/${part.name}`);
+    const response = await fetch(`./model4/onnx/parts/${part.name}`);
     buffers.push(await response.arrayBuffer());
     loaded += part.bytes;
     const ratio = loaded / manifest.total_bytes;
@@ -310,13 +310,13 @@ function onProgress(p) {
 }
 
 step("vocab", "doing");
-const judgeInfo = await fetch("./model3/judge.json").then(r => r.json());
-const tokenizer = await T.AutoTokenizer.from_pretrained("model3", {progress_callback: onProgress});
+const judgeInfo = await fetch("./model4/judge.json").then(r => r.json());
+const tokenizer = await T.AutoTokenizer.from_pretrained("model4", {progress_callback: onProgress});
 step("vocab", "done");
 if (cache && !(await cache.match(MODEL_URL))) {
   await fetchInParts(cache);        // 分けて置いてあるものを、つないで保存領域へ入れる
 }
-const model = await T.AutoModelForCausalLM.from_pretrained("model3", {
+const model = await T.AutoModelForCausalLM.from_pretrained("model4", {
   device: adapter ? "webgpu" : "wasm", dtype: "q4f16", progress_callback: onProgress,
 });
 step("build", "done");
