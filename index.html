@@ -234,11 +234,16 @@ const bootStart = performance.now();
 // 取得してつなぎ、transformers.js が見に行く場所（ブラウザの保存領域）へ先に置く。
 // そうすると、transformers.js からは1つのファイルとして見える。
 const MODEL_URL = new URL("./model4/onnx/model_q4f16.onnx", location.href).href;
+// 判定器を作り直したとき、保存してある古いものを使い続けないための目印である。
+// 置いてある本体の sha256 を保存領域にも入れておき、起動のたびに突き合わせる。
+const STAMP_URL = new URL("./model4/onnx/stamp", location.href).href;
+let manifest = null;
+try {
+  manifest = await (await fetch("./model4/onnx/parts/manifest.json")).json();
+} catch (e) { /* 分けて置いていない場合は、ふつうに読み込ませる */ }
+
 async function fetchInParts(cache) {
-  let manifest;
-  try {
-    manifest = await (await fetch("./model4/onnx/parts/manifest.json")).json();
-  } catch (e) { return false; }      // 分けて置いていない場合は、ふつうに読み込ませる
+  if (!manifest) return false;
   step("weights", "doing");
   const buffers = [];
   let loaded = 0;
@@ -262,6 +267,7 @@ async function fetchInParts(cache) {
   await cache.put(MODEL_URL, new Response(blob, {
     headers: {"content-type": "application/octet-stream", "content-length": String(blob.size)},
   }));
+  await cache.put(STAMP_URL, new Response(manifest.sha256));
   $("boot-rate").textContent = ""; $("boot-eta").textContent = "";
   step("weights", "done"); step("build", "doing");
   return true;
@@ -271,12 +277,21 @@ async function fetchInParts(cache) {
 let cache = null;
 try {
   cache = await caches.open("transformers-cache");
-  const url = MODEL_URL;
-  if (await cache.match(url)) {
-    $("boot-title").textContent = "保存してある判定器を読み込みます";
-    $("boot-lead").innerHTML = "前回この端末へ取り込んだ判定器が残っています。取り込み直さずに読み込みます。";
-    $("boot-warn").textContent = "読み込みと組み立てに十数秒かかります。通信は行いません。";
-    $("boot-hint").hidden = true;
+  if (await cache.match(MODEL_URL)) {
+    const kept = await cache.match(STAMP_URL);
+    const stamp = kept ? await kept.text() : null;
+    if (manifest && stamp !== manifest.sha256) {
+      // 置いてある判定器のほうが新しい。古いものを消して取り込み直す。
+      await cache.delete(MODEL_URL);
+      await cache.delete(STAMP_URL);
+      $("boot-title").textContent = "判定器が新しくなりました";
+      $("boot-lead").innerHTML = "前回より新しい判定器が公開されています。取り込み直します。";
+    } else {
+      $("boot-title").textContent = "保存してある判定器を読み込みます";
+      $("boot-lead").innerHTML = "前回この端末へ取り込んだ判定器が残っています。取り込み直さずに読み込みます。";
+      $("boot-warn").textContent = "読み込みと組み立てに十数秒かかります。通信は行いません。";
+      $("boot-hint").hidden = true;
+    }
   }
 } catch (e) { /* 保存領域を使えない環境もある */ }
 

@@ -2,7 +2,7 @@
  "file": "model_q4f16.onnx",
  "total_bytes": 159524590,
  "chunk_bytes": 41943040,
- "sha256": "89629eb5c30b425acf0ea623ff141afb5139e9e7f8c74e43b489e4abbdcde54f",
+ "sha256": "6e1df5d4b97e9911e01f255bbffa57c6b77c1af61258825ee4bb46856b4d39fc",
  "parts": [
   {
    "name": "part00.bin",
