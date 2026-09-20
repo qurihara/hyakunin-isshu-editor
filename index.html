@@ -81,9 +81,11 @@ footer b{font-weight:600; color:var(--ink)}
 @media (prefers-reduced-motion: reduce){#margin-area{transition:none}}
 /* 読み込みの画面 */
 #boot{
-  position:fixed; inset:0; z-index:10; background:var(--paper); display:flex; align-items:center; justify-content:center;
-  padding:24px 16px; transition:opacity .8s ease;
+  position:fixed; inset:0; z-index:10; background:var(--paper);
+  display:flex; flex-direction:column; transition:opacity .8s ease;
 }
+#boot-header{flex:0 0 auto}   /* 本編と同じ見出しを、読み込み中から出しておく */
+#boot .boot-inner{margin:0 auto; padding:24px 16px}
 #boot.gone{opacity:0; pointer-events:none}
 .boot-inner{max-width:34rem; width:100%}
 #boot h2{font-size:1.15rem; margin:0 0 14px; font-weight:600; letter-spacing:.03em; text-wrap:balance}
@@ -112,6 +114,10 @@ footer b{font-weight:600; color:var(--ink)}
 </style></head>
 <body>
 <div id="boot" role="status" aria-live="polite">
+  <header id="boot-header">
+    <h1>百人一首テキストエディタ</h1>
+    <span>詩的な文章を書いてみてください。あなたにぴったりの小倉百人一首をご紹介します。</span>
+  </header>
   <div class="boot-inner">
     <h2 id="boot-title">はじめに一度だけ、判定器を取り込みます</h2>
     <p id="boot-lead">この道具は、書いた文章を外へ送りません。判定は、いまお使いの端末の中だけで行います。
@@ -128,7 +134,7 @@ footer b{font-weight:600; color:var(--ink)}
     </ol>
     <p class="boot-note" id="boot-hint">組み立てには十数秒かかることがあります。画面が止まって見えても、動いています。</p>
 
-    <details id="tech">
+    <details id="tech" open>
       <summary>技術情報</summary>
       <h3>何をしているか</h3>
       <p>書いている文を、12個の主題（待つ、逢えない、人目、別れ、約束、涙、独り、月、秋、春、冬、時）について
