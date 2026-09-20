@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>百人一首テキストエディタ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#f6f2e8; --ink:#1d1b16; --ink-soft:#6b6558; --rule:#e0d9c8;
+  --ai:#2f4858;            /* 藍。機械の気配 */
+  --accent:#9c3d2e;        /* 朱。札が出たとき */
+  --card-w:clamp(150px, 19vw, 230px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#14130f; --ink:#ece7da; --ink-soft:#8f897b; --rule:#2a2822;
+    --ai:#8fb0c4; --accent:#d98b76;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14130f; --ink:#ece7da; --ink-soft:#8f897b; --rule:#2a2822;
+  --ai:#8fb0c4; --accent:#d98b76;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Shippori Mincho","Hiragino Mincho ProN",serif; line-height:1.9;
+  display:flex; flex-direction:column;
+}
+header{
+  display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  padding:10px 16px; border-bottom:1px solid var(--rule); font-size:.78rem; color:var(--ink-soft);
+  font-family:"Hiragino Sans",system-ui,sans-serif;
+}
+header h1{font-size:.9rem; margin:0; color:var(--ink); font-weight:600; letter-spacing:.04em}
+#state{margin-left:auto; display:flex; align-items:center; gap:8px}
+#pulse{width:8px; height:8px; border-radius:50%; background:var(--rule); transition:background .3s}
+#pulse.thinking{background:var(--ai)}
+#pulse.found{background:var(--accent)}
+main{flex:1; display:flex; min-height:0}
+#writer{
+  flex:1; min-width:0; border:0; outline:0; resize:none; background:transparent; color:inherit;
+  font:inherit; font-size:clamp(1rem, 1.05rem + .2vw, 1.2rem); line-height:2.1;
+  padding:28px clamp(16px, 4vw, 56px); caret-color:var(--accent);
+}
+#writer::placeholder{color:var(--ink-soft); opacity:.6}
+/* 周辺視野。中央の書く場所には触れない */
+#margin-area{
+  width:var(--card-w); flex:0 0 auto; border-left:1px solid var(--rule);
+  padding:20px 12px; display:flex; flex-direction:column; align-items:center; gap:14px;
+  opacity:0; transition:opacity 1.4s ease; pointer-events:none;   /* 消えるとき */
+}
+#margin-area.on{opacity:1; transition:opacity 2.6s ease}          /* 現れるとき。ゆっくり滲ませる */
+#margin-area img{width:100%; max-width:200px; border-radius:2px; filter:saturate(.9)}
+#waka{
+  writing-mode:vertical-rl; text-orientation:upright; font-size:.96rem; line-height:1.55;
+  letter-spacing:.14em; max-height:52vh; color:var(--ink);
+}
+#gist{font-size:.72rem; color:var(--ink-soft); font-family:"Hiragino Sans",system-ui,sans-serif;
+  writing-mode:horizontal-tb; text-align:center; line-height:1.6}
+#num{font-size:.7rem; color:var(--accent); letter-spacing:.08em}
+footer{
+  padding:6px 16px; border-top:1px solid var(--rule); font-size:.7rem; color:var(--ink-soft);
+  font-family:"Hiragino Sans",system-ui,sans-serif; display:flex; gap:14px; flex-wrap:wrap;
+}
+footer b{font-weight:600; color:var(--ink)}
+#read{font-family:"Shippori Mincho",serif; max-width:38ch; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom}
+#floor-box{display:flex; align-items:center; gap:6px; margin-left:auto}
+#floor{width:110px; accent-color:var(--ai)}
+#margin-area.on.faint{opacity:.55}   /* 基準を緩めて拾った札は、控えめに出す */
+@media (max-width:700px){
+  main{flex-direction:column}
+  #margin-area{width:auto; border-left:0; border-top:1px solid var(--rule); flex-direction:row;
+    align-items:flex-start; max-height:34vh; padding:12px 16px}
+  #margin-area img{width:90px; flex:0 0 auto}
+  #waka{max-height:28vh}
+  #gist{flex:1 1 10em; min-width:8em; text-align:left}   /* 横並びのとき、1文字ずつ折れないように */
+  #num{flex:0 0 auto; writing-mode:vertical-rl}
+}
+@media (prefers-reduced-motion: reduce){#margin-area{transition:none}}
+/* 読み込みの画面 */
+#boot{
+  position:fixed; inset:0; z-index:10; background:var(--paper); display:flex; align-items:center; justify-content:center;
+  padding:24px 16px; transition:opacity .8s ease;
+}
+#boot.gone{opacity:0; pointer-events:none}
+.boot-inner{max-width:34rem; width:100%}
+#boot h2{font-size:1.15rem; margin:0 0 14px; font-weight:600; letter-spacing:.03em; text-wrap:balance}
+#boot p{margin:0 0 12px; font-size:.9rem; line-height:1.9}
+.boot-note{color:var(--ink-soft); font-size:.82rem !important}
+.bar{height:3px; background:var(--rule); margin:22px 0 10px; overflow:hidden}
+.bar span{display:block; height:100%; width:0; background:var(--ai); transition:width .4s ease}
+#boot-figures{font-family:"Hiragino Sans",system-ui,sans-serif; font-size:.82rem !important;
+  color:var(--ink-soft); font-variant-numeric:tabular-nums}
+#boot-figures b{color:var(--ink); font-weight:600}
+#boot-steps{list-style:none; padding:0; margin:18px 0 12px; font-size:.84rem;
+  font-family:"Hiragino Sans",system-ui,sans-serif; color:var(--ink-soft)}
+#boot-steps li{padding:3px 0 3px 22px; position:relative}
+#boot-steps li::before{content:"・"; position:absolute; left:4px; color:var(--rule)}
+#boot-steps li[data-state="doing"]{color:var(--ink)}
+#boot-steps li[data-state="doing"]::before{content:"→"; color:var(--ai)}
+#boot-steps li[data-state="done"]::before{content:"✓"; color:var(--ai)}
+#tech{margin-top:20px; border-top:1px solid var(--rule); padding-top:14px;
+  font-family:"Hiragino Sans",system-ui,sans-serif; font-size:.82rem; color:var(--ink-soft)}
+#tech summary{cursor:pointer; color:var(--ai); font-size:.84rem}
+#tech h3{font-size:.82rem; margin:14px 0 4px; color:var(--ink); font-weight:600}
+#tech p{font-size:.82rem !important; margin:0 0 8px; line-height:1.85}
+#tech ul{margin:0 0 8px; padding-left:1.2em; line-height:1.85}
+#tech b{color:var(--ink)}
+.boot-inner{max-height:86vh; overflow-y:auto}
+</style></head>
+<body>
+<div id="boot" role="status" aria-live="polite">
+  <div class="boot-inner">
+    <h2 id="boot-title">はじめに一度だけ、判定器を取り込みます</h2>
+    <p id="boot-lead">この道具は、書いた文章を外へ送りません。判定は、いまお使いの端末の中だけで行います。
+      そのために、判定するしくみ（<b id="boot-size">約160メガバイト</b>）を、この端末へ取り込みます。</p>
+    <p class="boot-note" id="boot-warn">通信量が大きいので、高速で、通信量の制限がない回線でお使いになることをお勧めします。
+      取り込みは最初の一度だけです。二度目からは、保存したものを読み込むので数秒で始まります。</p>
+    <div class="bar"><span id="bar-fill"></span></div>
+    <p id="boot-figures"><b id="boot-mb">0</b> / <span id="boot-total">—</span> メガバイト
+      　<span id="boot-rate"></span><span id="boot-eta"></span></p>
+    <ol id="boot-steps">
+      <li data-step="vocab">言葉の対応表を読み込む</li>
+      <li data-step="weights">判定器の本体を取り込む</li>
+      <li data-step="build">判定器を組み立てて、計算機（GPU）に載せる</li>
+    </ol>
+    <p class="boot-note" id="boot-hint">組み立てには十数秒かかることがあります。画面が止まって見えても、動いています。</p>
+
+    <details id="tech">
+      <summary>技術情報</summary>
+      <h3>何をしているか</h3>
+      <p>書いている文を、12個の主題（待つ、逢えない、人目、別れ、約束、涙、独り、月、秋、春、冬、時）について
+        「有」か「無」かで判定し、その配列に近い札を100首から選んでいます。100首の側の主題は、あらかじめ人手で付けてあります。</p>
+      <h3>判定のしくみ</h3>
+      <p>TypeSafe社の <b>jev</b>（System One型モデル）の考え方を借りています。文章を書かせるのではなく、
+        型の決まった問いを並べて、確率つきの答えを一度に返させる方式です。その再現実装である
+        <b>kev</b> を手がかりに、ここでは12個の問いを1本の系列にまとめ、
+        「待つ？」「逢えない？」…と並べた各「？」の次の位置を一度に読み取っています。
+        12回ぶんの計算が1回で済み、判定はこの端末で <b>0.1秒から0.3秒</b> で終わります。</p>
+      <h3>使っているもの</h3>
+      <ul>
+        <li>土台のモデル … llm-jp/llm-jp-3-150m（1億5千万パラメータ、Apache-2.0）</li>
+        <li>追加の学習 … <b>LoRA</b>（土台は凍結し、全体の数パーセントだけを学習する方式）。
+          日本語の文章800件に12主題の正解を付けて学習しました。取り分けた124件での正答率は0.956です。</li>
+        <li>実行のしくみ … 学習した差分を土台に統合し、ONNX形式へ書き出して4ビットに量子化しました。
+          ブラウザでは transformers.js が WebGPU（使えないときはCPU）で動かします。</li>
+        <li>札の絵 … Wikimedia Commons のパブリックドメインの絵札100枚</li>
+      </ul>
+      <h3>外と通信するもの</h3>
+      <p>判定器の取り込みと、部品の読み込みだけです。書いた文章、判定の結果、選ばれた札は、どこへも送りません。
+        書いた文章はこの端末のブラウザの保存領域に残り、次に開いたときに続きから書けます。</p>
+    </details>
+  </div>
+</div>
+<header>
+  <h1>百人一首テキストエディタ</h1>
+  <span>詩的な文章を書いてみてください。あなたにぴったりの小倉百人一首をご紹介します。</span>
+  <span id="state"><span id="pulse"></span><span id="status">判定器を読み込んでいます</span></span>
+</header>
+<main>
+  <textarea id="writer" placeholder="ここに書きます。文を書き終えると裏で判定し、連想される札があれば右側に現れます。" spellcheck="false"></textarea>
+  <aside id="margin-area" aria-live="polite">
+    <span id="num"></span>
+    <div id="waka"></div>
+    <img id="fuda" alt="" hidden>
+    <div id="gist"></div>
+  </aside>
+</main>
+<footer>
+  <span>読んだ文: <b id="read">—</b></span>
+  <span>当てはまった主題: <b id="themes">—</b></span>
+  <span>判定にかかった時間: <b id="ms">—</b></span>
+  <span>選んだ札: <b id="pick">—</b></span>
+  <span>最高点: <b id="best">—</b></span>
+  <label id="floor-box">札の出やすさ
+    <input type="range" id="floor" min="0.2" max="1.4" step="0.05" value="1.00"
+           aria-label="当てはまらないときに、どこまで基準を緩めるか">
+    <b id="floor-val">1.00</b></label>
+  <span id="credit">絵札には、Wikimedia Commons にあるパブリックドメインの画像を使っています。</span>
+</footer>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const writer = $("writer"), area = $("margin-area");
+
+// ------- 設定 -------
+const IDLE_MS = 400;        // 入力が止まってから判定するまで
+const CONTEXT_CHARS = 120;  // 判定に渡す文字数（末尾から）
+const THRESHOLD = 1.4;      // 札を出す点数のしきい値（ふだんはこれ）
+const STEP_DOWN = 0.15;     // 当てはまらない判定が続くたびに、これだけ緩める
+const WIDE_SENTENCES = 6;   // 当てはまらないとき、読む範囲をここまで広げる
+const WIDE_CHARS = 600;
+const TIE = 0.25;           // 同点とみなす幅
+const WORD_BONUS = 0.7, RECENT_PENALTY = 1.0, RECENT_SIZE = 8;
+// 札は、次に別の札が決まるまで出したままにする。判定のたびに消すと、目の端がちらついて書く邪魔になる。
+const IMAGERY = ["月","雪","花","桜","紅葉","露","霜","風","波","山","川","海","雨","霧","霞","夢","涙","袖","衣",
+  "夜","朝","夕","秋","春","夏","冬","鳥","虫","鹿","松","草","葉","水","空","雲","星","光","影","道","橋","里","都"];
+
+// ------- 書いたものを残す（この端末の中だけ） -------
+try { writer.value = localStorage.getItem("hyakunin-draft") || ""; } catch (e) { /* 使えない環境もある */ }
+
+const [themesData, poems] = await Promise.all([
+  fetch("./themes.json").then(r => r.json()), fetch("./poems.json").then(r => r.json()),
+]);
+const THEMES = themesData.themes;
+for (const p of poems) p.words = IMAGERY.filter(w => p.text.includes(w));
+
+// ------- 判定器（この端末の中で動く） -------
+// 4系は手元に置いたモデルを読み込めないので3系を使う。
+const T = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm");
+T.env.allowRemoteModels = false; T.env.allowLocalModels = true;
+T.env.localModelPath = new URL(".", location.href).href;
+
+const adapter = navigator.gpu && await navigator.gpu.requestAdapter();
+
+// ------- 読み込みの画面 -------
+const MB = 2 ** 20;
+const step = (name, state) => {
+  const li = document.querySelector(`#boot-steps li[data-step="${name}"]`);
+  if (li) li.dataset.state = state;
+};
+const files = new Map();          // ファイルごとの取得量
+const bootStart = performance.now();
+
+// 判定器の本体は、GitHubの1ファイル100MBの制限に合わせて分けて置いてある（parts/）。
+// 取得してつなぎ、transformers.js が見に行く場所（ブラウザの保存領域）へ先に置く。
+// そうすると、transformers.js からは1つのファイルとして見える。
+const MODEL_URL = new URL("./model3/onnx/model_q4f16.onnx", location.href).href;
+async function fetchInParts(cache) {
+  let manifest;
+  try {
+    manifest = await (await fetch("./model3/onnx/parts/manifest.json")).json();
+  } catch (e) { return false; }      // 分けて置いていない場合は、ふつうに読み込ませる
+  step("weights", "doing");
+  const buffers = [];
+  let loaded = 0;
+  for (const part of manifest.parts) {
+    const response = await fetch(`./model3/onnx/parts/${part.name}`);
+    buffers.push(await response.arrayBuffer());
+    loaded += part.bytes;
+    const ratio = loaded / manifest.total_bytes;
+    $("bar-fill").style.width = `${(ratio * 100).toFixed(1)}%`;
+    $("boot-mb").textContent = (loaded / MB).toFixed(0);
+    $("boot-total").textContent = (manifest.total_bytes / MB).toFixed(0);
+    const seconds = (performance.now() - bootStart) / 1000;
+    const rate = loaded / MB / Math.max(seconds, 0.5);
+    if (seconds > 2 && rate > 0.1) {
+      $("boot-rate").textContent = `毎秒 ${rate.toFixed(1)} メガバイト`;
+      const left = (manifest.total_bytes - loaded) / MB / rate;
+      $("boot-eta").textContent = left > 3 ? `　残り およそ${Math.ceil(left)}秒` : "";
+    }
+  }
+  const blob = new Blob(buffers, {type: "application/octet-stream"});
+  await cache.put(MODEL_URL, new Response(blob, {
+    headers: {"content-type": "application/octet-stream", "content-length": String(blob.size)},
+  }));
+  $("boot-rate").textContent = ""; $("boot-eta").textContent = "";
+  step("weights", "done"); step("build", "doing");
+  return true;
+}
+
+// すでに取り込み済みかを調べ、文面を変える
+let cache = null;
+try {
+  cache = await caches.open("transformers-cache");
+  const url = MODEL_URL;
+  if (await cache.match(url)) {
+    $("boot-title").textContent = "保存してある判定器を読み込みます";
+    $("boot-lead").innerHTML = "前回この端末へ取り込んだ判定器が残っています。取り込み直さずに読み込みます。";
+    $("boot-warn").textContent = "読み込みと組み立てに十数秒かかります。通信は行いません。";
+    $("boot-hint").hidden = true;
+  }
+} catch (e) { /* 保存領域を使えない環境もある */ }
+
+function onProgress(p) {
+  if (p.status === "initiate" && p.file) {
+    const name = p.file.includes(".onnx") ? "weights" : "vocab";
+    const li = document.querySelector(`#boot-steps li[data-step="${name}"]`);
+    if (li && li.dataset.state !== "done") step(name, "doing");   // 済んだ段は戻さない
+  }
+  if (p.status === "progress" && p.total) {
+    files.set(p.file, {loaded: p.loaded, total: p.total});
+    let loaded = 0, total = 0;
+    for (const f of files.values()) { loaded += f.loaded; total += f.total; }
+    const ratio = total ? loaded / total : 0;
+    $("bar-fill").style.width = `${(ratio * 100).toFixed(1)}%`;
+    $("boot-mb").textContent = (loaded / MB).toFixed(0);
+    $("boot-total").textContent = (total / MB).toFixed(0);
+    const seconds = (performance.now() - bootStart) / 1000;
+    const rate = loaded / MB / Math.max(seconds, 0.5);
+    if (seconds > 2 && rate > 0.1) {
+      $("boot-rate").textContent = `毎秒 ${rate.toFixed(1)} メガバイト`;
+      const left = (total - loaded) / MB / rate;
+      $("boot-eta").textContent = left > 3 ? `　残り およそ${Math.ceil(left)}秒` : "";
+    }
+  }
+  if (p.status === "done" && p.file && p.file.includes(".onnx")) {
+    step("weights", "done"); step("build", "doing");
+    $("boot-rate").textContent = ""; $("boot-eta").textContent = "";
+    $("bar-fill").style.width = "100%";
+  }
+}
+
+step("vocab", "doing");
+const judgeInfo = await fetch("./model3/judge.json").then(r => r.json());
+const tokenizer = await T.AutoTokenizer.from_pretrained("model3", {progress_callback: onProgress});
+step("vocab", "done");
+if (cache && !(await cache.match(MODEL_URL))) {
+  await fetchInParts(cache);        // 分けて置いてあるものを、つないで保存領域へ入れる
+}
+const model = await T.AutoModelForCausalLM.from_pretrained("model3", {
+  device: adapter ? "webgpu" : "wasm", dtype: "q4f16", progress_callback: onProgress,
+});
+step("build", "done");
+$("boot").classList.add("gone");
+setTimeout(() => { $("boot").hidden = true; }, 900);
+const YES = judgeInfo.yes_id, NO = judgeInfo.no_id, SHORT = judgeInfo.short;
+const IDLE_TEXT = adapter ? "入力を待っています" : "入力を待っています（計算はCPUで行います）";
+$("status").textContent = IDLE_TEXT;
+
+// 12個の主題を1本の系列で一度に判定する。
+//   文章：…
+//   待つ？ 逢えない？ 人目？ …
+// 「？」の位置の次に来る語（有か無）を読む。1回の計算で12個そろう。
+async function judge(text) {
+  const head = tokenizer.encode(`文章：${text}\n`, {add_special_tokens: false});
+  const ids = [...head], positions = [];
+  for (let i = 0; i < THEMES.length; i++) {
+    const piece = tokenizer.encode((i ? " " : "") + `${SHORT[THEMES[i].id]}？`, {add_special_tokens: false});
+    ids.push(...piece);
+    positions.push(ids.length - 1);
+  }
+  const input_ids = new T.Tensor("int64", BigInt64Array.from(ids.map(BigInt)), [1, ids.length]);
+  const attention_mask = new T.Tensor("int64", BigInt64Array.from(ids.map(() => 1n)), [1, ids.length]);
+  const out = await model({input_ids, attention_mask});
+  const [, len, vocab] = out.logits.dims, data = out.logits.data;
+  const result = {};
+  THEMES.forEach((t, i) => {
+    const base = positions[i] * vocab;
+    const y = Number(data[base + YES]), n = Number(data[base + NO]);
+    result[t.id] = 1 / (1 + Math.exp(n - y));
+  });
+  return result;
+}
+
+// ------- 札を選ぶ -------
+const recent = [];
+// 最高点と、選んだ札を返す。点数は「主題の重み×確率」の合計に、情景の語の一致を足したもの。
+// 中心の主題（重み2）が確率1.0で当たれば2.0、確率0.7なら1.4になる。
+function pick(probabilities, text, threshold) {
+  const scored = poems.map(p => {
+    let s = 0;
+    for (const [id, w] of Object.entries(p.themes)) s += w * (probabilities[id] ?? 0);
+    s += WORD_BONUS * p.words.filter(w => text.includes(w)).length;
+    if (recent.includes(p.id)) s -= RECENT_PENALTY;
+    return [s, p];
+  }).sort((a, b) => b[0] - a[0]);
+  const best = scored[0][0];
+  if (best < threshold) return {card: null, best};
+  const tied = scored.filter(([s]) => best - s <= TIE);
+  return {card: tied[Math.floor(Math.random() * tied.length)][1], best};
+}
+
+// いま出している札。次の判定が始まっても消さず、別の札に決まったときだけ入れ替える。
+let current = null;
+async function show(card, faint = false) {
+  if (!card) {                      // 当てはまる札がなければ、いま出ているものをそのまま残す
+    $("pick").textContent = current ? `${current.id}番（そのまま）` : "出さない";
+    $("pulse").className = current ? "found" : "";
+    return;
+  }
+  if (current && card.id === current.id) {   // 同じ札なら、描き直さない
+    $("pick").textContent = `${card.id}番（変わらず）`;
+    $("pulse").className = "found";
+    return;
+  }
+  // 入れ替えるときは、いったん静かに消してから、次の札を滲ませる。
+  const wasShowing = area.classList.contains("on");
+  current = card;
+  recent.push(card.id); if (recent.length > RECENT_SIZE) recent.shift();
+  if (wasShowing) {
+    area.classList.remove("on");
+    await new Promise(r => setTimeout(r, 1500));   // 消えきるまで待つ
+  }
+  const img = $("fuda");
+  const src = `./images/${String(card.id).padStart(3, "0")}.jpg`;
+  try {                                            // 絵が届いてから現す。途中で切り替わらないように
+    const preload = new Image();
+    preload.src = src;
+    await preload.decode();
+  } catch (e) { /* 絵がなくても歌は出す */ }
+  $("num").textContent = `第${card.id}番　${card.author}`;
+  $("waka").textContent = card.text;
+  $("gist").textContent = card.gist;
+  img.src = src; img.alt = `${card.id}番の絵札`; img.hidden = false;
+  area.classList.toggle("faint", faint);   // 基準を緩めて拾った札は控えめに
+  area.classList.add("on");
+  $("pick").textContent = `${card.id}番`;
+  $("pulse").className = "found";
+}
+
+// ------- いつ判定するか -------
+// 日本語の入力は変換で文字が揺れるので、確定（compositionend）を合図にする。
+// 端末によっては確定の合図が来ないことがあるため、入力が止まったときにも判定する。
+let timer = null, composing = false, busy = false, lastJudged = "";
+
+function context(sentences = 2, chars = CONTEXT_CHARS) {
+  const upto = writer.value.slice(0, writer.selectionEnd ?? writer.value.length);
+  const parts = upto.split(/(?<=[。！？\n])/).filter(s => s.trim());
+  return parts.slice(-sentences).join("").slice(-chars).trim();
+}
+
+// 当てはまらない判定が続いたら、基準を少しずつ緩める。ただし下限（画面のつまみ）より下げない。
+let misses = 0;
+const floorValue = () => Number($("floor").value);
+const nowThreshold = () => Math.max(floorValue(), THRESHOLD - STEP_DOWN * misses);
+
+async function maybeJudge() {
+  if (composing) return;
+  if (busy) { schedule(); return; }   // 判定の最中に来た合図は捨てず、終わってからやり直す
+  const text = context();
+  if (text.length < 8 || text === lastJudged) return;
+  busy = true; lastJudged = text;
+  $("read").textContent = text;       // いま何を読んで判定したかを示す
+  $("pulse").className = "thinking"; $("status").textContent = "いま書いた文を、12の主題について判定しています";
+  const t0 = performance.now();
+  try {
+    const threshold = nowThreshold();
+    let probabilities = await judge(text);
+    let { card, best } = pick(probabilities, text, threshold);
+    let widened = false;
+    if (!card) {                       // 当てはまらなければ、読む範囲を段落まで広げてもう一度
+      const wide = context(WIDE_SENTENCES, WIDE_CHARS);
+      if (wide.length > text.length) {
+        $("status").textContent = "当てはまる札がないので、読む範囲を広げています";
+        $("read").textContent = wide;
+        probabilities = await judge(wide);
+        const wider = pick(probabilities, wide, threshold);
+        best = Math.max(best, wider.best);
+        card = wider.card;
+        widened = !!card;
+      }
+    }
+    $("best").textContent = `${best.toFixed(2)}（基準 ${threshold.toFixed(2)}）`;
+    misses = card ? 0 : misses + 1;
+    $("ms").textContent = `${Math.round(performance.now() - t0)} ミリ秒`;
+    const strong = THEMES.filter(t => probabilities[t.id] >= 0.5)
+      .map(t => `${t.name}${probabilities[t.id].toFixed(2)}`).join("、");
+    $("themes").textContent = strong || "なし";
+    const loose = threshold < THRESHOLD - 1e-6;
+    await show(card, widened || loose);
+    if (card) {
+      $("pick").textContent += widened ? "（範囲を広げて）" : (loose ? "（基準を緩めて）" : "");
+    }
+  } finally {
+    busy = false; $("status").textContent = IDLE_TEXT;
+  }
+}
+
+const schedule = () => { clearTimeout(timer); timer = setTimeout(maybeJudge, IDLE_MS); };
+writer.addEventListener("compositionstart", () => { composing = true; });
+writer.addEventListener("compositionend", () => { composing = false; schedule(); });
+writer.addEventListener("input", (e) => {
+  try { localStorage.setItem("hyakunin-draft", writer.value); } catch (err) { /* 使えない環境もある */ }
+  if (e.isComposing) return;   // 変換の途中では判定しない
+  schedule();
+});
+// つまみ。当てはまらないときに、どこまで基準を緩めるかの下限を決める。右へ寄せるほど厳しい。
+try {
+  const saved = localStorage.getItem("hyakunin-floor");
+  if (saved) $("floor").value = saved;
+} catch (e) { /* 使えない環境もある */ }
+const showFloor = () => {
+  $("floor-val").textContent = floorValue().toFixed(2);
+  $("floor-box").title = floorValue() >= THRESHOLD - 1e-6
+    ? "緩めない。当てはまらなければ出さない" : `${THRESHOLD.toFixed(2)} から ${floorValue().toFixed(2)} まで緩める`;
+};
+$("floor").addEventListener("input", () => {
+  showFloor();
+  try { localStorage.setItem("hyakunin-floor", $("floor").value); } catch (e) { /* 同上 */ }
+});
+showFloor();
+
+writer.focus();
+window.__judge = judge;        // 動作確認のために外から呼べるようにしておく
+</script></body></html>
